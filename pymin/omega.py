@@ -128,7 +128,12 @@ class Omega(Multistage):
         return self.__RADIX
 
     def __str__(self):
-        pass
+        s=""
+        for row in range(self.len):
+            for stage in range(self.stages):
+                s += str(self.__switch[row * self.stages + stage]) + "\t"
+            s += "\n"
+        return s
 
     def __len__(self):
         return self.__SIZE
