@@ -1,10 +1,7 @@
 from .multistage import Multistage
 from math import ceil, log2, pow
 
-
 class Omega(Multistage):
-
-
     def __init__(self, n : int, extras : int = 0, radix : int = 2) -> None:
         super().__init__()
 
@@ -13,13 +10,10 @@ class Omega(Multistage):
         self.__RADIX     : int = radix
         self.__STAGES    : int = ceil(log2(n) / log2(radix)) + extras
 
-        self.__WIND_BITS : int = ceil(log2(n)) 
-        self.__EXTR_BITS : int = ceil(radix/2) * extras
-        self.__PATH_BITS : int = 2 * self.__WIND_BITS + self.__EXTR_BITS
-        self.__WIND_MASK : int = n-1
-        self.__CONF_MASK : int = radix-1
-        self.__SLID_RATE : int = ceil(radix/2)
-        
+        self.__WINDOW_SIZE : int = ceil(log2(n))
+        self.__SLIDE_RATE  : int = ceil(radix/2)
+        self.__EXTRA_SIZE  : int = ceil(radix/2) * extras
+
         self.__switch : list = [None] * (self.len * self.stages)
 
     def route(self, requests : list[tuple[int,int]]) -> tuple[int,int]:
@@ -43,24 +37,15 @@ class Omega(Multistage):
 
     def one2one(self, input : int, output : int) -> bool:
         
-        assert 0 <= input  < self.len, f"in one2one(self, input : int, output : int) -> bool\n\tinput must be in between [0, {self.len-1}], but is {input}."
-        assert 0 <= output < self.len, f"in one2one(self, input : int, output : int) -> bool\n\toutput must be in between [0, {self.len-1}], but is {output}." 
+        assert 0 <= input  < self.len
+        assert 0 <= output < self.len
 
         for extra in range(self.extras):
-
-            found_path : bool = True
-            path       : bool = self.__concat(input, extra, output)
-
-            for stage in range(self.stages):
-                
-                row : int = self.__slide(path, stage)
-
-                if not self.__is_path_available(path, row, stage):
-                    found_path = False
-                    break
             
-            if found_path:
-                self.__send_message(path)
+            word : int = self.__concat(input, extra, output)
+
+            if self.__backtracking(word):
+                self.__update(word)
                 return True
         
         return False
@@ -68,48 +53,46 @@ class Omega(Multistage):
     def clear(self):
         self.__switch : list = [None] * (self.len * self.stages)
 
-    def __is_path_available(self, path : int, row : int, stage : int) -> bool:
-        
-        assert 0 <= path  < pow(2, self.__PATH_BITS), f"in __is_path_available(self, path : int, row : int, stage : int) -> bool\n\tpath must be in between [0, {pow(2, self.__PATH_BITS)-1}], but is {path}."
-        assert 0 <= row   < self.len, f"in __is_path_available(self, path : int, row : int, stage : int) -> bool\n\trow must be in between [0, {self.len-1}], but is {row}."
-        assert 0 <= stage < self.stages, f"in __is_path_available(self, path : int, row : int, stage : int) -> bool\n\tstage must be in between [0, {self.stages-1}], but is {stage}."
-
-        idx : int = row * self.stages + stage
-
-        is_path_free : bool = self.__switch[idx] == None
-        is_multicast : bool = self.__switch[idx] == self.__config_bit(path, stage)
-
-        return is_path_free or is_multicast
-
-    def __send_message(self, path : int) -> None:
-        
-        assert 0 <= path  < pow(2, self.__PATH_BITS), f"in __send_message(self, path : int) -> None\n\tpath must be in between [0, {pow(2, self.__PATH_BITS)-1}], but is {path}."
+    def __has_conflict(self, source : int, target : int) -> bool:
+        return target != None and source != target
+    
+    def __backtracking(self, word : int) -> tuple:
 
         for stage in range(self.stages):
-            row : int = self.__slide(path, stage)
-            self.__switch[ row * self.stages + stage ] = self.__config_bit(path, stage)
+
+            port : int = self.__slide(word, stage)
+
+            source : int = self.__config_bit(word, stage)
+            target : int = self.__switch[port * self.stages + stage]
+
+            if self.__has_conflict(source, target):
+                return False
+            
+        return True
+
+    def __update(self, path : int) -> None:
+        for stage in range(self.stages):
+
+            port : int = self.__slide(path, stage)
+
+            source : int = self.__config_bit(path, stage)
+            self.__switch[port * self.stages + stage] = source
 
     def __concat(self, input : int, extra : int, output : int) -> int:
         
-        assert 0 <= input  < self.len, f"in __concat(self, input : int, extra : int, output : int) -> int\n\tinput must be in between [0, {self.len-1}], but is {input}."
-        assert 0 <= output < self.len, f"in __concat(self, input : int, extra : int, output : int) -> int\n\toutput must be in between [0, {self.len-1}], but is {output}."
-        assert 0 <= extra  < self.len, f"in __concat(self, input : int, extra : int, output : int) -> int\n\textra must be in between [0, {self.extras-1}], but is {extra}."
+        assert 0 <= input  < self.len
+        assert 0 <= output < self.len
+        assert 0 <= extra  < self.len
 
-        return output | (extra << self.__WIND_BITS) | (input << (self.__WIND_BITS + self.__EXTR_BITS))
+        return output | (extra << self.__WINDOW_SIZE) | (input << (self.__WINDOW_SIZE + self.__EXTRA_SIZE))
     
     def __slide(self, path : int, stage : int) -> int:
-
-        assert 0 <= path  < pow(2, self.__PATH_BITS), f"in __slide(self, path : int, stage : int) -> int\n\tpath must be in between [0, {pow(2, self.__PATH_BITS)-1}], but is {path}."
-        assert 0 <= stage < self.stages, f"in __slide(self, path : int, stage : int) -> int\n\tstage must be in between [0, {self.stages-1}], but is {stage}."
-
-        return (path >> (self.__PATH_BITS - (stage + 1) * self.__SLID_RATE - self.__WIND_BITS)) & self.__WIND_MASK
+        assert 0 <= stage < self.stages
+        return (path >> (self.__SLIDE_RATE * stage)) & (self.len - 1)
 
     def __config_bit(self, path : int, stage : int) -> int:
-    
-        assert 0 <= path  < pow(2, self.__PATH_BITS), f"in __config_bit(self, path : int, stage : int) -> int\n\tpath must be in between [0, {pow(2, self.__PATH_BITS)-1}], but is {path}."
-        assert 0 <= stage < self.stages, f"in __config_bit(self, path : int, stage : int) -> int\n\tstage must be in between [0, {self.stages-1}], but is {stage}."
-    
-        return (path >> (self.__PATH_BITS - (stage + 1) * self.__SLID_RATE)) & self.__CONF_MASK
+        assert 0 <= stage < self.stages
+        return (path >> (self.__SLIDE_RATE * stage + self.__WINDOW_SIZE)) & (self.radix - 1)
 
     @property
     def len(self) -> int:
@@ -130,7 +113,7 @@ class Omega(Multistage):
     def __str__(self):
         s=""
         for row in range(self.len):
-            for stage in range(self.stages):
+            for stage in reversed(range(self.stages)):
                 s += str(self.__switch[row * self.stages + stage]) + "\t"
             s += "\n"
         return s
