@@ -1,8 +1,15 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+@dataclass
+class Package:
+    source : int
+    target : int
+    data   : any
 
 class Multistage(ABC):
     @abstractmethod
-    def route(self, requests : list[tuple[int,int]]) -> tuple[int,int]:
+    def route(self, requests : list[Package]) -> tuple[int,int]:
         """
         Routes a batch of requests through the multistage network.
 

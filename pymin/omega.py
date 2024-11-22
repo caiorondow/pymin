@@ -1,14 +1,14 @@
-from .multistage import Multistage
+from .multistage import Multistage, Package
 from math import ceil, log2, pow
 
 class Omega(Multistage):
     def __init__(self, n : int, extras : int = 0, radix : int = 2) -> None:
         super().__init__()
 
-        self.__SIZE      : int = n
-        self.__EXTRAS    : int = ceil(pow(radix, extras))
-        self.__RADIX     : int = radix
-        self.__STAGES    : int = ceil(log2(n) / log2(radix)) + extras
+        self.__SIZE   : int = n
+        self.__EXTRAS : int = ceil(pow(radix, extras))
+        self.__RADIX  : int = radix
+        self.__STAGES : int = ceil(log2(n) / log2(radix)) + extras
 
         self.__WINDOW_SIZE : int = ceil(log2(n))
         self.__SLIDE_RATE  : int = ceil(radix/2)
@@ -16,23 +16,26 @@ class Omega(Multistage):
 
         self.__switch : list = [None] * (self.len * self.stages)
 
-    def route(self, requests : list[tuple[int,int]]) -> tuple[int,int]:
+    def route(self, requests : list[Package]) -> tuple[int,int]:
+        
         clk = 0
         fail = 0
         pending_requests = requests.copy()
 
         while pending_requests:
+            
             clk += 1
+            
             current_requests = pending_requests.copy()
             pending_requests.clear()
             
             self.clear()
             
-            for input, output in current_requests:
-                if not self.one2one(input, output):
-                    pending_requests.append((input, output))
+            for request in current_requests:
+                if not self.one2one(request.source, request.target):
+                    pending_requests.append((request.source, request.target))
                     fail += 1
-
+             
         return clk, fail
 
     def one2one(self, input : int, output : int) -> bool:
