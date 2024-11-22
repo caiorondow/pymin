@@ -33,7 +33,7 @@ class Omega(Multistage):
             
             for request in current_requests:
                 if not self.one2one(request.source, request.target):
-                    pending_requests.append((request.source, request.target))
+                    pending_requests.append(request)
                     fail += 1
              
         return clk, fail
